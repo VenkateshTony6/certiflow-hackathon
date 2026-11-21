@@ -117,9 +117,14 @@ app.get("/api/certificates/:certNumber/download", async (request, response) => {
 
 app.use("/api", authenticate(prisma));
 
-function csvFile(request: Request): Buffer | undefined {
+function csvFile(request: Request): { buffer?: Buffer; error?: string } {
   const files = request.files as Express.Multer.File[] | undefined;
-  return files?.[0]?.buffer;
+  const file = files?.find((candidate) => candidate.fieldname === "file");
+  if (!file) return { error: "CSV file is required" };
+  if (!file.originalname.toLowerCase().endsWith(".csv")) {
+    return { error: "Only .csv files are supported. A PDF, spreadsheet, or document cannot be uploaded here." };
+  }
+  return { buffer: file.buffer };
 }
 
 app.post(
@@ -127,7 +132,12 @@ app.post(
   allowRoles(UserRole.TRAINING_CENTER),
   upload.any(),
   async (request, response) => {
-    const validation = validateCandidatesCsv(csvFile(request));
+    const uploadedCsv = csvFile(request);
+    if (uploadedCsv.error) {
+      response.status(400).json({ errors: [{ row: 1, message: uploadedCsv.error }] });
+      return;
+    }
+    const validation = validateCandidatesCsv(uploadedCsv.buffer);
     if (validation.errors.length) {
       response.status(400).json({ errors: validation.errors });
       return;
@@ -181,7 +191,12 @@ app.put(
   upload.any(),
   async (request, response) => {
     const batchId = String(request.params.id);
-    const validation = validateCandidatesCsv(csvFile(request));
+    const uploadedCsv = csvFile(request);
+    if (uploadedCsv.error) {
+      response.status(400).json({ errors: [{ row: 1, message: uploadedCsv.error }] });
+      return;
+    }
+    const validation = validateCandidatesCsv(uploadedCsv.buffer);
     if (validation.errors.length) {
       response.status(400).json({ errors: validation.errors });
       return;

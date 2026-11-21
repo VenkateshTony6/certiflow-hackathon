@@ -34,6 +34,14 @@ function downloadSample(kind: "valid" | "bad") {
   URL.revokeObjectURL(link.href);
 }
 
+function csvUploadError(form: FormData): string | null {
+  const file = form.get("file");
+  if (!(file instanceof File) || file.size === 0) return "Choose a candidate CSV file.";
+  if (!file.name.toLowerCase().endsWith(".csv")) return "Only .csv files are supported. A PDF, spreadsheet, or document cannot be uploaded here.";
+  if (file.size > 5 * 1024 * 1024) return "The CSV file must be 5 MB or smaller.";
+  return null;
+}
+
 function Status({ value }: { value: string }) {
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusTone[value] ?? "bg-slate-50 text-slate-700 ring-slate-200"}`}>{label(value)}</span>;
 }
@@ -130,6 +138,11 @@ export function App() {
     setErrors([]);
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const fileError = csvUploadError(form);
+    if (fileError) {
+      setErrors([{ row: 1, message: fileError }]);
+      return;
+    }
     form.set("district", activeUser?.district ?? "");
     try {
       await api("/api/batches", userId, { method: "POST", body: form });
@@ -153,6 +166,13 @@ export function App() {
     event.preventDefault();
     if (!modal) return;
     const form = new FormData(event.currentTarget);
+    if (modal.kind === "resubmit") {
+      const fileError = csvUploadError(form);
+      if (fileError) {
+        setMessage(fileError);
+        return;
+      }
+    }
     try {
       if (modal.kind === "resubmit") await api(`/api/batches/${modal.batch.id}/resubmit`, userId, { method: "PUT", body: form });
       else if (modal.kind === "decision") await api(`/api/batches/${modal.batch.id}/decision`, userId, { method: "POST", body: JSON.stringify({ decision: modal.decision, comment: form.get("comment") }) });
@@ -166,7 +186,7 @@ export function App() {
   }
 
   return <div className="min-h-screen bg-slate-50 text-slate-900">
-    <nav className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4"><h1 className="text-lg font-extrabold">CertiFlow <span className="font-medium text-slate-400">— Pragati Skills Mission</span></h1><div className="flex flex-wrap items-center gap-3"><button onClick={() => setPublicMode((value) => !value)} className={`rounded-full px-4 py-2 text-sm font-semibold ${publicMode ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700"}`}>{publicMode ? "Exit Public Verify" : "Public Verify"}</button>{!publicMode && <select aria-label="Demo persona" value={userId} onChange={(event) => setUserId(event.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium">{users.map((user) => <option key={user.id} value={user.id}>{user.name} · {label(user.role)}{user.district ? ` · ${user.district}` : ""}</option>)}</select>}</div></div></nav>
+    <nav className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4"><h1 className="text-lg font-extrabold">CertiFlow <span className="font-medium text-slate-400">— Pragati Skills Mission</span></h1><div className="flex flex-wrap items-center gap-3"><button onClick={() => setPublicMode((value) => !value)} className={`rounded-full px-4 py-2 text-sm font-semibold ${publicMode ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700"}`}>{publicMode ? "Exit Public Verify" : "Public Verify"}</button>{!publicMode && <select aria-label="Demo persona" disabled={users.length === 0} value={activeUser?.id ?? ""} onChange={(event) => setUserId(event.target.value)} className="min-w-64 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 disabled:cursor-wait disabled:text-slate-400"><option value="" disabled>{users.length === 0 ? "Loading personas…" : "Select a persona"}</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name} · {label(user.role)}{user.district ? ` · ${user.district}` : ""}</option>)}</select>}</div></div></nav>
     {publicMode ? <PublicVerify /> : <main className="mx-auto max-w-7xl px-4 py-8">
       {message && <button onClick={() => setMessage("")} className="mb-5 w-full rounded-xl bg-slate-900 px-4 py-3 text-left text-sm text-white">{message}</button>}
       {activeUser?.role === "TRAINING_CENTER" && <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-xl font-bold">Submit a new batch</h2><p className="text-sm text-slate-500">Upload all candidates in one validated CSV.</p></div><div className="flex gap-3"><button onClick={() => downloadSample("valid")} className="text-sm font-semibold text-emerald-700">Download sample</button><button onClick={() => downloadSample("bad")} className="text-sm font-semibold text-red-600">Bad CSV sample</button></div></div><form onSubmit={createBatch} className="mt-5 grid gap-3 md:grid-cols-[1fr_1fr_1.2fr_auto]"><input name="batchCode" required placeholder="Batch code" className="rounded-xl border border-slate-300 px-4 py-2.5"/><input name="courseName" required placeholder="Course name" className="rounded-xl border border-slate-300 px-4 py-2.5"/><input name="file" type="file" accept=".csv,text/csv" required className="rounded-xl border border-slate-300 px-3 py-2 text-sm"/><button className="rounded-xl bg-emerald-600 px-5 py-2.5 font-semibold text-white">Submit</button></form>{errors.length > 0 && <ul className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-700">{errors.map((error, index) => <li key={`${error.row}-${index}`}>Row {error.row}: {error.message}</li>)}</ul>}</section>}

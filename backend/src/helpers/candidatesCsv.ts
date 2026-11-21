@@ -21,10 +21,13 @@ export function validateCandidatesCsv(buffer?: Buffer):
       trim: true,
       bom: true,
     });
-  } catch (error) {
+  } catch {
     return {
       candidates: [],
-      errors: [{ row: 1, message: error instanceof Error ? error.message : "Invalid CSV" }],
+      errors: [{
+        row: 1,
+        message: "The file is not a readable CSV. Download the sample and upload a .csv file with fullName, phone, and enrollmentNo columns.",
+      }],
     };
   }
 
