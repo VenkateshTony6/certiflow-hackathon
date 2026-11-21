@@ -1,4 +1,4 @@
-import { app } from "./app";
+import { app } from "./index";
 import { config } from "./config";
 import { redis } from "./redis";
 
