@@ -7,26 +7,133 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Organization {
-  id           String        @id @default(cuid())
-  name         String
-  slug         String        @unique
+enum UserRole {
+  TRAINING_CENTER
+  DISTRICT_OFFICER
+  QUALITY_TEAM
+  STATE_OFFICE
+}
+
+enum BatchStatus {
+  SUBMITTED
+  DISTRICT_APPROVED
+  QUALITY_APPROVED
+  STATE_APPROVED
+  REJECTED
+  SENT_BACK
+}
+
+enum ApprovalStage {
+  DISTRICT
+  QUALITY
+  STATE
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+  SENT_BACK
+}
+
+enum CertificateStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model User {
+  id        String          @id @default(cuid())
+  name      String
+  email     String          @unique
+  role      UserRole
+  district  String?
+  batches   Batch[]         @relation("TrainingCenterBatches")
+  approvals BatchApproval[]
+  auditLogs AuditLog[]
+}
+
+model Batch {
+  id           String          @id @default(cuid())
+  batchCode    String          @unique
+  centerId     String
+  center       User            @relation("TrainingCenterBatches", fields: [centerId], references: [id])
+  district     String
+  courseName   String
+  status       BatchStatus     @default(SUBMITTED)
+  reviewNote   String?
+  escalated    Boolean         @default(false)
+  candidates   Candidate[]
+  approvals    BatchApproval[]
   certificates Certificate[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([centerId])
+  @@index([district, status])
+}
+
+model Candidate {
+  id           String        @id @default(cuid())
+  batchId      String
+  batch        Batch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  fullName     String
+  phone        String
+  enrollmentNo String
+  certificates Certificate[]
+
+  @@unique([batchId, enrollmentNo])
+  @@index([batchId])
+}
+
+model BatchApproval {
+  id        String           @id @default(cuid())
+  batchId   String
+  batch     Batch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  officerId String
+  officer   User             @relation(fields: [officerId], references: [id])
+  stage     ApprovalStage
+  decision  ApprovalDecision
+  comment   String?
+
+  @@unique([batchId, officerId, stage])
+  @@index([batchId])
+  @@index([officerId])
 }
 
 model Certificate {
-  id             String       @id @default(cuid())
-  certificateNo  String       @unique
-  recipientName  String
-  courseName     String
-  issuedAt       DateTime     @default(now())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id             String            @id @default(cuid())
+  certNumber     String            @unique
+  batchId        String
+  batch          Batch             @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  candidateId    String
+  candidate      Candidate         @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  status         CertificateStatus @default(ACTIVE)
+  deliveryStatus DeliveryStatus    @default(PENDING)
+  pdfUrl         String?
+  issuedAt       DateTime          @default(now())
+  revokedAt      DateTime?
+  revokedReason  String?
 
-  @@index([organizationId])
+  @@unique([batchId, candidateId])
+  @@index([batchId])
+  @@index([candidateId])
 }
 
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id])
+  action     String
+  metadata   Json
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+}
